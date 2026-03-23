@@ -1,0 +1,42 @@
+# rclone exclude rules for GitHub → Google Drive sync
+# Format: one pattern per line, all are excludes.
+# Docs: https://rclone.org/filtering/
+
+# ── Git internals ─────────────────────────────────────────────────────────────
+# Git object store, refs, hooks — never belongs in Drive.
+.git/**
+.gitignore
+.gitkeep
+
+# ── GitHub CI/CD ──────────────────────────────────────────────────────────────
+# Workflows, this exclude file itself, setup docs — infra, not content.
+.github/**
+
+# ── Git hooks ─────────────────────────────────────────────────────────────────
+# pre-commit script (check-version.ps1 runner) — dev tooling only.
+.githooks/**
+
+# ── AI assistant configuration ────────────────────────────────────────────────
+# .claude/ — Claude Code settings; .codex/ — OpenAI Codex settings.
+# AGENTS.md / CLAUDE.md — project-level AI instructions, not content rules.
+.claude/**
+.codex/**
+AGENTS.md
+CLAUDE.md
+
+# ── Development / build scripts ───────────────────────────────────────────────
+# bump-version.ps1, check-version.ps1 — version management tooling.
+scripts/**
+
+# ── Version tracking ──────────────────────────────────────────────────────────
+# VERSION file is a technical artifact used by the pre-commit hook.
+VERSION
+
+# ── OS / editor artifacts ─────────────────────────────────────────────────────
+# Produced locally; should never reach the repo, but exclude defensively.
+.DS_Store
+Thumbs.db
+.idea/**
+.vscode/**
+*.tmp
+*.bak

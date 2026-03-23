@@ -1,0 +1,123 @@
+name: Sync to Google Drive
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry-run mode — show what would change, make no actual changes"
+        required: false
+        default: "true"
+        type: boolean
+
+jobs:
+  sync:
+    name: rclone sync → Google Drive
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ── 1. Checkout ─────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # ── 2. Install rclone ───────────────────────────────────────────────────
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      # ── 3. Write rclone config ──────────────────────────────────────────────
+      # RCLONE_CONF must contain base64-encoded content of rclone.conf.
+      # See .github/SYNC_SETUP.md for how to obtain it.
+      - name: Configure rclone
+        env:
+          RCLONE_CONF: ${{ secrets.RCLONE_CONF }}
+        run: |
+          if [ -z "$RCLONE_CONF" ]; then
+            echo "::error::Secret RCLONE_CONF is not set. See .github/SYNC_SETUP.md."
+            exit 1
+          fi
+          mkdir -p ~/.config/rclone
+          echo "$RCLONE_CONF" | base64 --decode > ~/.config/rclone/rclone.conf
+          chmod 600 ~/.config/rclone/rclone.conf
+
+      # ── 4. Smoke-check: verify the remote is reachable ──────────────────────
+      - name: Verify remote
+        env:
+          GDRIVE_DEST: ${{ secrets.GDRIVE_DEST }}
+        run: |
+          if [ -z "$GDRIVE_DEST" ]; then
+            echo "::error::Secret GDRIVE_DEST is not set. See .github/SYNC_SETUP.md."
+            exit 1
+          fi
+          REMOTE="${GDRIVE_DEST%%:*}"
+          echo "Checking remote: $REMOTE"
+          rclone listremotes | grep -qx "${REMOTE}:" || {
+            echo "::error::Remote '$REMOTE' not found in rclone.conf."
+            exit 1
+          }
+          echo "Remote OK."
+
+      # ── 5. Determine dry-run mode ────────────────────────────────────────────
+      # Priority: workflow_dispatch input > repository variable DRY_RUN > false
+      - name: Resolve dry-run flag
+        id: flags
+        env:
+          INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
+          VAR_DRY_RUN: ${{ vars.DRY_RUN }}
+        run: |
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
+            DRY_RUN=true
+          elif [ "$VAR_DRY_RUN" = "true" ]; then
+            DRY_RUN=true
+          else
+            DRY_RUN=false
+          fi
+          echo "dry_run=$DRY_RUN" >> "$GITHUB_OUTPUT"
+          echo "Dry-run: $DRY_RUN"
+
+      # ── 6. Sync ──────────────────────────────────────────────────────────────
+      - name: Sync to Google Drive
+        env:
+          GDRIVE_DEST: ${{ secrets.GDRIVE_DEST }}
+          DRY_RUN: ${{ steps.flags.outputs.dry_run }}
+        run: |
+          EXCLUDE_FILE="$GITHUB_WORKSPACE/.github/rclone-exclude.txt"
+          EXTRA_FLAGS=()
+
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "::notice::Running in DRY-RUN mode. No files will be changed."
+            EXTRA_FLAGS+=(--dry-run)
+          else
+            echo "::notice::Running in LIVE mode. Changes will be applied to Google Drive."
+          fi
+
+          rclone sync "$GITHUB_WORKSPACE" "$GDRIVE_DEST" \
+            --exclude-from "$EXCLUDE_FILE" \
+            "${EXTRA_FLAGS[@]}" \
+            --verbose \
+            --log-level INFO \
+            --stats 60s \
+            --transfers 4 \
+            --checkers 8
+
+      # ── 7. Summary ───────────────────────────────────────────────────────────
+      - name: Write job summary
+        if: always()
+        env:
+          DRY_RUN: ${{ steps.flags.outputs.dry_run }}
+          GDRIVE_DEST: ${{ secrets.GDRIVE_DEST }}
+        run: |
+          echo "## Sync to Google Drive" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Parameter | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Mode | ${DRY_RUN:-false} == true → **dry-run** |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Destination | \`${GDRIVE_DEST:-not set}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Exclude rules | \`.github/rclone-exclude.txt\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Trigger | \`${{ github.event_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
