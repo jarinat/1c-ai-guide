@@ -100,7 +100,6 @@ jobs:
           rclone sync "$GITHUB_WORKSPACE" "$GDRIVE_DEST" \
             --exclude-from "$EXCLUDE_FILE" \
             "${EXTRA_FLAGS[@]}" \
-            --verbose \
             --log-level INFO \
             --stats 60s \
             --transfers 4 \
