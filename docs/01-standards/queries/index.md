@@ -18,3 +18,4 @@
 ## Список правил
 - [QRY-FORBIDDEN-001. Не выполнять запросы в цикле по умолчанию](forbidden/no-queries-in-loop.md)
 - [QRY-EXCEPTION-001. Запросы в цикле по явному разрешению пользователя](exceptions/queries-in-loop-by-explicit-approval.md)
+- [QRY-REC-001. Разделение поиска ссылок через ВЫБРАТЬ РАЗЛИЧНЫЕ и временные таблицы](recommended/batch-query-with-distinct-temp-tables.md)
